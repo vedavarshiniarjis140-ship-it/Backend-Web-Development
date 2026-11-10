@@ -1,30 +1,36 @@
-// TODO: Implement requireAuth middleware.
-//
-// This function currently calls next() unconditionally — all routes are unprotected.
-// Replace this with a proper implementation that:
-//
-// 1. Reads the Authorization header from the request (req.headers.authorization).
-//    Use `?? ''` so you never work with undefined.
-//
-// 2. Extracts the Bearer token using a strict regex:
-//      /^Bearer ([^\s]+)$/i
-//    If the regex does not match, token = null.
-//
-// 3. Returns 401 immediately if token is null:
-//      res.status(401).json({ error: { code: 'AUTH_REQUIRED', message: 'Authentication required' } })
-//
-// 4. Calls jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] }) inside a try block.
-//    On success:
-//      - Set req.user = the verified payload
-//      - Call next()
-//
-// 5. In the catch block, returns the same generic 401 response for every error type.
-//    Do NOT distinguish TokenExpiredError from JsonWebTokenError in the client response.
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// const jwt = require('jsonwebtoken');  ← uncomment when you start implementing
+const jwt = require('jsonwebtoken');
 
+/**
+ * requireAuth middleware
+ * 
+ * Enforces authentication on protected routes:
+ * 1. Reads Authorization header safely with nullish coalescing.
+ * 2. Enforces Bearer scheme strictly via regex.
+ * 3. Returns 401 generic error immediately if token is missing or malformed.
+ * 4. Verifies token cryptographically with server-owned algorithm policy ('HS256').
+ * 5. Attaches verified payload to req.user only after successful verification.
+ * 6. Returns identical 401 generic response on any verification failure.
+ */
 module.exports = function requireAuth(req, res, next) {
-  // Replace this with your implementation:
-  next();
+  // ── Extract ──────────────────────────────────────────────
+  const authHeader = req.headers.authorization ?? '';
+  const match = /^Bearer ([^\s]+)$/i.exec(authHeader);
+  const token = match ? match[1] : null;
+
+  if (!token) {
+    return res.status(401).json({
+      error: { code: 'AUTH_REQUIRED', message: 'Authentication required' }
+    });
+  }
+
+  // ── Verify ───────────────────────────────────────────────
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    req.user = payload;
+    next();
+  } catch (_error) {
+    return res.status(401).json({
+      error: { code: 'AUTH_REQUIRED', message: 'Authentication required' }
+    });
+  }
 };
